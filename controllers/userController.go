@@ -14,11 +14,11 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	helper "github.com/Anshbir18/go-jwt/helpers"
+	models "github.com/Anshbir18/go-jwt/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	models "github.com/Anshbir18/go-jwt/models"
-	"github.com/Anshbir18/go-jwt/helper"
 )
 
 
@@ -26,12 +26,64 @@ var userCollection *mongo.Collection = database.OpenCollection(database.Client, 
 var validate = validator.New()
 func HashPassword()  {}
 func VerifyPassword()  {}
-func Signup()  {}
-func Login()  {}
 
-//only an admin can access this route and get the users data
+func Signup()gin.HandlerFunc{
+	return func(c *gin.Context){
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		defer cancel()
 
-func GetUsers()  {}
+		var user models.User
+		if err := c.BindJSON(&user); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error":err.Error()})
+	}
+
+	validationError := validate.Struct(user)
+	if validationError != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error":validationError.Error()})
+	}
+	count, err := userCollection.CountDocuments(ctx, bson.M{"email":user.Email})
+		defer cancel()
+		if err != nil {
+			log.Panic(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error":"error occured while checking for the email"})
+		}
+
+		count, err = userCollection.CountDocuments(ctx, bson.M{"phone":user.Phone})
+		defer cancel()
+		if err!= nil {
+			log.Panic(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error":"error occured while checking for the phone number"})
+		}
+
+		if count >0{
+			c.JSON(http.StatusInternalServerError, gin.H{"error":"this email or phone number already exists"})
+		}
+
+		user.Created_at=time.Now().UTC()
+		user.Updated_at=time.Now().UTC()
+		user.ID=primitive.NewObjectID()
+		user.User_id=user.ID.Hex()
+		token, refreshToken, _ := helper.GenerateAllTokens(*user.Email, *user.First_name, *user.Last_name, *user.User_type, *&user.User_id)
+		user.Token=token
+		user.Refresh_token=refreshToken
+
+		resultInsertionNumber, insertErr := userCollection.InsertOne(ctx, user)
+		defer cancel()
+		if insertErr != nil {
+			msg := fmt.Sprintf("error occured while inserting the user in the database")
+			c.JSON(http.StatusInternalServerError, gin.H{"error":msg})
+			return
+		}
+		c.JSON(http.StatusCreated, gin.H{"data":resultInsertionNumber})
+	}
+}
+
+// func Login()  {}
+
+// //only an admin can access this route and get the users data
+
+// func GetUsers()  {}
+
 func GetUser() gin.HandlerFunc{
 	return func(c *gin.Context){
 		userId := c.Param("user_id")
