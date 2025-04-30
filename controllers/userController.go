@@ -25,7 +25,17 @@ import (
 var userCollection *mongo.Collection = database.OpenCollection(database.Client, "users")
 var validate = validator.New()
 func HashPassword()  {}
-func VerifyPassword()  {}
+func VerifyPassword(userPassword string , providedPassword string) (bool , string){
+	err := bcrypt.CompareHashAndPassword([]byte(providedPassword), []byte(userPassword))
+	check := true
+	msg := ""
+
+	if err!= nil {
+		msg = fmt.Sprintf("email of password is incorrect")
+		check=false
+	}
+	return check, msg
+}
 
 func Signup()gin.HandlerFunc{
 	return func(c *gin.Context){
@@ -78,7 +88,29 @@ func Signup()gin.HandlerFunc{
 	}
 }
 
-// func Login()  {}
+func Login() gin.HandlerFunc{
+	return func(c *gin.Context){
+		var ctx,cancle = context.WithTimeout(context.Background(),100*time.Second)
+		var user models.User
+		var foundUser models.User
+
+		if err :=c.BindJSON(&user); err!=nil{
+			c.JSON(http.StatusBadRequest, gin.H{"error":err.Error()})
+			return
+		}
+		err := userCollection.FindOne(ctx,bson.M{"email":user.Email}).Decode(&foundUser)
+		defer cancle()
+		if err!=nil{
+			c.JSON(http.StatusInternalServerError, gin.H{"error":"error occured while checking for the email"})
+			return
+		}
+
+		passwordIsValid,err :=VerifyPassword(*user.Password, *foundUser.Password)
+
+		defer cancle()
+
+	}
+}
 
 // //only an admin can access this route and get the users data
 
