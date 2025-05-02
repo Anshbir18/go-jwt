@@ -57,6 +57,9 @@ func Signup()gin.HandlerFunc{
 	if validationError != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error":validationError.Error()})
 	}
+	password := HashPassword(*user.Password)
+
+	user.Password=&password
 	count, err := userCollection.CountDocuments(ctx, bson.M{"email":user.Email})
 		defer cancel()
 		if err != nil {
@@ -79,7 +82,7 @@ func Signup()gin.HandlerFunc{
 		user.Updated_at=time.Now().UTC()
 		user.ID=primitive.NewObjectID()
 		user.User_id=user.ID.Hex()
-		token, refreshToken, _ := helper.GenerateAllTokens(*user.Email, *user.First_name, *user.Last_name, *user.User_type, *&user.User_id)
+		token, refreshToken, _ := helper.GenerateAllToken(*user.Email, *user.First_name, *user.Last_name, *user.User_type, *&user.User_id)
 		user.Token=token
 		user.Refresh_token=refreshToken
 
@@ -111,10 +114,30 @@ func Login() gin.HandlerFunc{
 			return
 		}
 
-		passwordIsValid,err :=VerifyPassword(*user.Password, *foundUser.Password)
+		passwordIsValid,msg :=VerifyPassword(*user.Password, *foundUser.Password)
 
 		defer cancle()
 
+		if passwordIsValid != true{
+			c.JSON(http.StatusBadRequest, gin.H{"error":msg})
+			return
+		}
+
+		if foundUser.Email == nil{
+			c.JSON(http.StatusInternalServerError, gin.H{"error":"user not found"})
+		}
+
+		token,refreshToekn,err := helper.GenerateAllToken(*foundUser.Email, *foundUser.First_name, *foundUser.Last_name, *foundUser.User_type, *foundUser.User_id)
+		
+		helper.UpdateAllToken(token,refreshToekn,*foundUser.User_id)
+
+		err = userCollection.FindOne(ctx,bson.M{"user_if":foundUser.User_id}).Decode(&foundUser)
+
+		if err!=nil{
+			c.JSON(http.StatusInternalServerError, gin.H{"error":err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, foundUser)
 	}
 }
 
