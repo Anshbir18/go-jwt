@@ -1,4 +1,4 @@
-package helper
+package helpers
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 )
 
 
-type signedDetails struct{
+type SignedDetails struct{
 	Email string
 	First_name string
 	Last_name string
@@ -30,7 +30,7 @@ var userCollection *mongo.Collection = database.OpenCollection(database.Client, 
 var SECRET_KEY = os.Getenv("SECRET_KEY")
 
 func GenerateAllToken(email string, first_name string, last_name string, user_type string, uuid string) (signedToken string,signedRefreshToken string,err error){
-	claims := &signedDetails{
+	claims := &SignedDetails{
 		Email: email,
 		First_name: first_name,
 		Last_name: last_name,
@@ -42,7 +42,7 @@ func GenerateAllToken(email string, first_name string, last_name string, user_ty
 		},
 	}
 
-	refeshClaims := &signedDetails{
+	refeshClaims := &SignedDetails{
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: time.Now().Local().Add(time.Hour * time.Duration(168)).Unix(),
 		},
@@ -55,6 +55,35 @@ func GenerateAllToken(email string, first_name string, last_name string, user_ty
 		return
 	}
 	return token,refreshToken,err
+}
+
+func ValidateToken(signedToken string) (claims *SignedDetails, msg string){
+	token, err := jwt.ParseWithClaims(
+		signedToken,
+		&SignedDetails{},
+		func(token *jwt.Token)(interface{}, error){
+			return []byte(SECRET_KEY), nil
+		},
+	)
+
+	if err != nil {
+		msg=err.Error()
+		return
+	}
+
+	claims, ok:= token.Claims.(*SignedDetails)
+	if !ok{
+		msg = fmt.Sprintf("the token is invalid")
+		msg = err.Error()
+		return
+	}
+
+	if claims.ExpiresAt < time.Now().Local().Unix(){
+		msg = fmt.Sprintf("token is expired")
+		msg = err.Error()
+		return
+	}
+	return claims, msg
 }
 
 func UpdateAllToken(signedToken string, signedRefreshToken string, userId string){
